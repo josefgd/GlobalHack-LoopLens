@@ -51,27 +51,59 @@ if st.button("Analyze Session"):
 
     st.divider()
 
-    st.header("Analysis Result")
+    st.header("📊 Session Summary")
 
-    st.metric("Dominant mode", result["dominant_mode"].title())
+    col1, col2 = st.columns(2)
 
-    st.subheader("Mode timeline")
-    st.write(" → ".join(mode.title() for mode in result["mode_timeline"]))
+    with col1:
+        st.metric(
+            label="Dominant Strategy",
+            value=result["dominant_mode"].title()
+        )
 
-    st.subheader("Mode counts")
-    st.json(result["mode_counts"])
+    with col2:
+        if result["stagnation_detected"]:
+            st.metric(
+                label="Collaboration Risk",
+                value="⚠ Detected"
+            )
+        else:
+            st.metric(
+                label="Collaboration Risk",
+                value="✅ Not Detected"
+            )
 
-    st.subheader("Observation")
-    st.info(result["observation"])
+    st.markdown("---")
 
-    if result["stagnation_detected"]:
-        st.warning("Possible collaboration stagnation detected.")
-    else:
-        st.success("No strong stagnation pattern detected.")
+    from collections import Counter
+    st.subheader("Collaboration Pattern")
 
-    st.subheader("Suggested strategy shift")
-    st.write(result["suggestion"])
+    mode_counts = Counter(result["mode_timeline"])
 
-    st.subheader("Try asking")
-    for prompt in result["example_prompts"]:
-        st.markdown(f"- {prompt}")
+    icons = {
+        "generation": "🟠",
+        "understanding": "🔵",
+        "planning": "🟢",
+        "verification": "🟣",
+        "exploration": "🟡",
+        "unknown": "⚪",
+    }
+
+    for mode, count in mode_counts.items():
+        st.write(f"{icons.get(mode, '⚪')} **{mode.title()} × {count}**")
+
+    st.subheader("AI Insight")
+
+    with st.container(border=True):
+        st.markdown(result["observation"])
+
+        st.markdown("---")
+
+        st.markdown("**Recommended Next Strategy**")
+        st.write(result["suggestion"])
+
+        st.markdown("---")
+
+        st.markdown("**Suggested Questions**")
+        for prompt in result["example_prompts"]:
+            st.markdown(f"- {prompt}")

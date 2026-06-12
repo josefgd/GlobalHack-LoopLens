@@ -3,7 +3,7 @@ from collections import Counter
 MODES = {
     "generation": ["implement", "generate", "create", "fix", "refactor", "write", "build"],
     "understanding": ["what does", "why", "where does", "how does", "explain", "depends on", "breaks if"],
-    "planning": ["plan", "steps", "approach", "first", "break down", "sequence"],
+    "planning": ["plan","step","steps","first","next","approach","roadmap","break down","sequence"],
     "verification": ["review", "edge cases", "did i miss", "validate", "check", "risk"],
     "exploration": ["alternatives", "tradeoffs", "compare", "options", "another approach"],
 }
@@ -16,24 +16,68 @@ def classify_prompt(prompt: str) -> str:
     for mode, keywords in MODES.items():
         scores[mode] = sum(1 for keyword in keywords if keyword in text)
 
-    best_mode, best_score = max(scores.items(), key=lambda item: item[1])
+    max_score = max(scores.values())
 
-    if best_score == 0:
+    if max_score == 0:
         return "unknown"
 
-    return best_mode
+    priority = [
+        "understanding",
+        "planning",
+        "verification",
+        "exploration",
+        "generation",
+    ]
+
+    for mode in priority:
+        if scores.get(mode) == max_score:
+            return mode
+
+    return "unknown"
 
 
 def extract_user_prompts(conversation_log: str) -> list[str]:
     prompts = []
+    current_speaker = None
+    current_prompt_lines = []
+
+    def flush_prompt():
+        if current_speaker in {"user", "developer"} and current_prompt_lines:
+            prompt = " ".join(current_prompt_lines).strip()
+            if prompt:
+                prompts.append(prompt)
 
     for line in conversation_log.splitlines():
         clean = line.strip()
 
+        if clean.lower() in {"user:", "developer:", "assistant:"}:
+            flush_prompt()
+            current_speaker = clean[:-1].lower()
+            current_prompt_lines = []
+            continue
+
         if clean.lower().startswith("user:"):
-            prompts.append(clean[5:].strip())
-        elif clean.lower().startswith("developer:"):
-            prompts.append(clean[10:].strip())
+            flush_prompt()
+            current_speaker = "user"
+            current_prompt_lines = [clean[5:].strip()]
+            continue
+
+        if clean.lower().startswith("developer:"):
+            flush_prompt()
+            current_speaker = "developer"
+            current_prompt_lines = [clean[10:].strip()]
+            continue
+
+        if clean.lower().startswith("assistant:"):
+            flush_prompt()
+            current_speaker = "assistant"
+            current_prompt_lines = []
+            continue
+
+        if clean and current_speaker in {"user", "developer"}:
+            current_prompt_lines.append(clean)
+
+    flush_prompt()
 
     return prompts
 
@@ -86,7 +130,8 @@ def detect_stagnation(task_type: str, timeline: list[str]) -> dict:
 def generate_suggestion(stagnation_result: dict) -> dict:
     if not stagnation_result.get("stagnation_detected"):
         return {
-            "observation": "No strong collaboration stagnation detected.",
+            "observation": "The collaboration shows a healthy balance between strategies.\n\n"
+            "No dominant collaboration risk detected.",
             "suggestion": "Continue working. Consider verifying before finalizing your changes.",
             "example_prompts": [
                 "What edge cases should I check?",
@@ -96,7 +141,8 @@ def generate_suggestion(stagnation_result: dict) -> dict:
         }
 
     return {
-        "observation": "Generation has dominated this session.",
+        "observation": "Generation has dominated this session.\n\n"
+        "For architecture and refactoring tasks, extended generation without sufficient understanding may increase the risk of rework.",
         "suggestion": "Consider switching temporarily to Understanding mode before continuing implementation.",
         "example_prompts": [
             "What does this class do?",
